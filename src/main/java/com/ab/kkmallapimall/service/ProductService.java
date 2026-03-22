@@ -20,7 +20,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 /**
- * 商品服务
+ * Product service.
  */
 @Service
 @RequiredArgsConstructor
@@ -30,19 +30,30 @@ public class ProductService {
     private final CategoryMapper categoryMapper;
 
     /**
-     * 获取商品列表
+     * Get product list.
      */
-    public PageResult<ProductVO> getProductList(Long categoryId, String keyword, Integer pageNum, Integer pageSize) {
+    public PageResult<ProductVO> getProductList(
+            Long categoryId,
+            String keyword,
+            String sortBy,
+            Integer pageNum,
+            Integer pageSize
+    ) {
         Page<Product> page = new Page<>(pageNum, pageSize);
 
         LambdaQueryWrapper<Product> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(Product::getStatus, 1) // 只查询上架商品
+        wrapper.eq(Product::getStatus, 1)
                 .eq(categoryId != null, Product::getCategoryId, categoryId)
                 .and(StringUtils.hasText(keyword), w -> w
                         .like(Product::getProductName, keyword)
                         .or()
-                        .like(Product::getDescription, keyword))
-                .orderByDesc(Product::getCreateTime);
+                        .like(Product::getDescription, keyword));
+
+        if ("price".equalsIgnoreCase(sortBy)) {
+            wrapper.orderByAsc(Product::getPrice).orderByDesc(Product::getCreateTime);
+        } else {
+            wrapper.orderByDesc(Product::getCreateTime);
+        }
 
         Page<Product> productPage = productMapper.selectPage(page, wrapper);
 
@@ -54,7 +65,7 @@ public class ProductService {
     }
 
     /**
-     * 获取商品详情
+     * Get product detail.
      */
     public ProductVO getProductDetail(Long id) {
         Product product = productMapper.selectById(id);
@@ -65,7 +76,7 @@ public class ProductService {
     }
 
     /**
-     * 获取热门商品
+     * Get hot products.
      */
     public List<ProductVO> getHotProducts(Integer limit) {
         Page<Product> page = new Page<>(1, limit);
@@ -81,21 +92,16 @@ public class ProductService {
                 .collect(Collectors.toList());
     }
 
-    /**
-     * 转换为VO
-     */
     private ProductVO convertToVO(Product product) {
         ProductVO vo = new ProductVO();
         BeanUtils.copyProperties(product, vo);
 
-        // 处理图片
         if (StringUtils.hasText(product.getImages())) {
             List<String> imageList = Arrays.asList(product.getImages().split(","));
             vo.setImageList(imageList);
             vo.setMainImage(imageList.isEmpty() ? null : imageList.get(0));
         }
 
-        // 查询分类名称
         if (product.getCategoryId() != null) {
             Category category = categoryMapper.selectById(product.getCategoryId());
             if (category != null) {

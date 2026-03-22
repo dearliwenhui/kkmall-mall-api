@@ -1,23 +1,24 @@
 package com.ab.kkmallapimall.service;
 
 import com.ab.kkmallapimall.common.PageResult;
-import com.ab.kkmallapimall.entity.PointsLog;
 import com.ab.kkmallapimall.entity.MallUser;
-import com.ab.kkmallapimall.mapper.PointsLogMapper;
+import com.ab.kkmallapimall.entity.PointsLog;
 import com.ab.kkmallapimall.mapper.MallUserMapper;
+import com.ab.kkmallapimall.mapper.PointsLogMapper;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
- * 积分服务
+ * Points service.
  */
 @Service
 @RequiredArgsConstructor
@@ -27,7 +28,7 @@ public class PointsService {
     private final MallUserMapper mallUserMapper;
 
     /**
-     * 添加积分
+     * Add points.
      */
     @Transactional(rollbackFor = Exception.class)
     public void addPoints(Long userId, Integer points, Integer type, Long orderId, String description) {
@@ -35,7 +36,6 @@ public class PointsService {
             return;
         }
 
-        // 更新用户积分
         MallUser user = mallUserMapper.selectById(userId);
         if (user != null) {
             Integer currentPoints = user.getPoints() != null ? user.getPoints() : 0;
@@ -43,7 +43,6 @@ public class PointsService {
             mallUserMapper.updateById(user);
         }
 
-        // 记录积分日志
         PointsLog log = new PointsLog();
         log.setUserId(userId);
         log.setPoints(points);
@@ -54,7 +53,7 @@ public class PointsService {
     }
 
     /**
-     * 扣减积分
+     * Deduct points.
      */
     @Transactional(rollbackFor = Exception.class)
     public void deductPoints(Long userId, Integer points, Integer type, Long orderId, String description) {
@@ -62,7 +61,6 @@ public class PointsService {
             return;
         }
 
-        // 更新用户积分
         MallUser user = mallUserMapper.selectById(userId);
         if (user != null) {
             Integer currentPoints = user.getPoints() != null ? user.getPoints() : 0;
@@ -73,7 +71,6 @@ public class PointsService {
             mallUserMapper.updateById(user);
         }
 
-        // 记录积分日志（负数）
         PointsLog log = new PointsLog();
         log.setUserId(userId);
         log.setPoints(-points);
@@ -84,7 +81,7 @@ public class PointsService {
     }
 
     /**
-     * 获取用户积分
+     * Get user points.
      */
     public Integer getUserPoints(Long userId) {
         MallUser user = mallUserMapper.selectById(userId);
@@ -92,7 +89,7 @@ public class PointsService {
     }
 
     /**
-     * 获取积分记录
+     * Get points log.
      */
     public PageResult<Map<String, Object>> getPointsLog(Long userId, Integer pageNum, Integer pageSize) {
         Page<PointsLog> page = new Page<>(pageNum, pageSize);
@@ -120,18 +117,24 @@ public class PointsService {
     }
 
     /**
-     * 签到获取积分
+     * Daily sign in.
      */
     @Transactional(rollbackFor = Exception.class)
     public void signIn(Long userId) {
-        // 检查今天是否已签到
-        // 简化实现：每次签到给5积分
+        LocalDateTime startOfDay = LocalDateTime.now().toLocalDate().atStartOfDay();
+        Long count = pointsLogMapper.selectCount(
+                new LambdaQueryWrapper<PointsLog>()
+                        .eq(PointsLog::getUserId, userId)
+                        .eq(PointsLog::getType, 1)
+                        .ge(PointsLog::getCreateTime, startOfDay)
+        );
+        if (count != null && count > 0) {
+            throw new RuntimeException("今日已签到");
+        }
+
         addPoints(userId, 5, 1, null, "每日签到");
     }
 
-    /**
-     * 获取积分类型名称
-     */
     private String getTypeName(Integer type) {
         return switch (type) {
             case 1 -> "签到";

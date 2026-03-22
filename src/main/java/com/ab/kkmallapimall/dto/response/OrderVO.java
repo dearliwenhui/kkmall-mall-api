@@ -18,6 +18,8 @@ public class OrderVO {
 
     private BigDecimal totalAmount;
 
+    private BigDecimal couponAmount;
+
     private Integer status;
 
     private String receiverName;

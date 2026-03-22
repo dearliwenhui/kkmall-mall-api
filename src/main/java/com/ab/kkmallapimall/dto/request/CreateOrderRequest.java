@@ -7,16 +7,22 @@ import lombok.Data;
 import java.util.List;
 
 /**
- * 创建订单请求
+ * Create order request.
  */
 @Data
 public class CreateOrderRequest {
 
-    @NotNull(message = "收货地址ID不能为空")
+    @NotNull(message = "addressId is required")
     private Long addressId;
 
-    @NotEmpty(message = "购物车ID列表不能为空")
+    @NotEmpty(message = "cartIds cannot be empty")
     private List<Long> cartIds;
+
+    private Long userCouponId;
+
+    private Boolean usePoints;
+
+    private Integer pointsToUse;
 
     private String remark;
 }
