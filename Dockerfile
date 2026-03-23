@@ -17,6 +17,9 @@ RUN apk add --no-cache wget && \
     mkdir -p /app/skywalking && \
     tar -xzf /tmp/skywalking.tgz -C /tmp && \
     cp -r /tmp/skywalking-agent/* /app/skywalking/ && \
+    cp /app/skywalking/optional-plugins/apm-spring-webmvc-6.x-plugin-*.jar /app/skywalking/plugins/ && \
+    cp /app/skywalking/optional-plugins/apm-spring-resttemplate-6.x-plugin-*.jar /app/skywalking/plugins/ && \
+    cp /app/skywalking/optional-plugins/apm-trace-ignore-plugin-*.jar /app/skywalking/plugins/ && \
     rm -rf /tmp/skywalking.tgz /tmp/skywalking-agent && \
     mkdir -p /app/skywalking/logs
 
