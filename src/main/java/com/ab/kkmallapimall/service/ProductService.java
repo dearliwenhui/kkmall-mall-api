@@ -17,6 +17,8 @@ import org.springframework.util.StringUtils;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -44,10 +46,7 @@ public class ProductService {
         LambdaQueryWrapper<Product> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(Product::getStatus, 1)
                 .eq(categoryId != null, Product::getCategoryId, categoryId)
-                .and(StringUtils.hasText(keyword), w -> w
-                        .like(Product::getProductName, keyword)
-                        .or()
-                        .like(Product::getDescription, keyword));
+                .like(StringUtils.hasText(keyword), Product::getProductName, keyword);
 
         if ("price".equalsIgnoreCase(sortBy)) {
             wrapper.orderByAsc(Product::getPrice).orderByDesc(Product::getCreateTime);
@@ -56,9 +55,10 @@ public class ProductService {
         }
 
         Page<Product> productPage = productMapper.selectPage(page, wrapper);
+        Map<Long, String> categoryNameMap = buildCategoryNameMap(productPage.getRecords());
 
         List<ProductVO> voList = productPage.getRecords().stream()
-                .map(this::convertToVO)
+                .map(product -> convertToVO(product, categoryNameMap))
                 .collect(Collectors.toList());
 
         return PageResult.of(pageNum, pageSize, productPage.getTotal(), voList);
@@ -72,27 +72,29 @@ public class ProductService {
         if (product == null || product.getStatus() == 0) {
             throw new BusinessException(ErrorCode.PRODUCT_NOT_FOUND);
         }
-        return convertToVO(product);
+        return convertToVO(product, buildCategoryNameMap(List.of(product)));
     }
 
     /**
      * Get hot products.
      */
     public List<ProductVO> getHotProducts(Integer limit) {
-        Page<Product> page = new Page<>(1, limit);
+        int safeLimit = normalizeHotLimit(limit);
 
         LambdaQueryWrapper<Product> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(Product::getStatus, 1)
-                .orderByDesc(Product::getCreateTime);
+                .orderByDesc(Product::getCreateTime)
+                .last("LIMIT " + safeLimit);
 
-        Page<Product> productPage = productMapper.selectPage(page, wrapper);
+        List<Product> products = productMapper.selectList(wrapper);
+        Map<Long, String> categoryNameMap = buildCategoryNameMap(products);
 
-        return productPage.getRecords().stream()
-                .map(this::convertToVO)
+        return products.stream()
+                .map(product -> convertToVO(product, categoryNameMap))
                 .collect(Collectors.toList());
     }
 
-    private ProductVO convertToVO(Product product) {
+    private ProductVO convertToVO(Product product, Map<Long, String> categoryNameMap) {
         ProductVO vo = new ProductVO();
         BeanUtils.copyProperties(product, vo);
 
@@ -103,12 +105,30 @@ public class ProductService {
         }
 
         if (product.getCategoryId() != null) {
-            Category category = categoryMapper.selectById(product.getCategoryId());
-            if (category != null) {
-                vo.setCategoryName(category.getName());
-            }
+            vo.setCategoryName(categoryNameMap.get(product.getCategoryId()));
         }
 
         return vo;
+    }
+
+    private Map<Long, String> buildCategoryNameMap(List<Product> products) {
+        Set<Long> categoryIds = products.stream()
+                .map(Product::getCategoryId)
+                .filter(id -> id != null)
+                .collect(Collectors.toSet());
+
+        if (categoryIds.isEmpty()) {
+            return Map.of();
+        }
+
+        return categoryMapper.selectBatchIds(categoryIds).stream()
+                .collect(Collectors.toMap(Category::getId, Category::getName, (left, right) -> left));
+    }
+
+    private int normalizeHotLimit(Integer limit) {
+        if (limit == null || limit < 1) {
+            return 10;
+        }
+        return Math.min(limit, 50);
     }
 }
