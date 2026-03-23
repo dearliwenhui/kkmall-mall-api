@@ -5,6 +5,9 @@ package com.ab.kkmallapimall.common;
  */
 public class Constants {
 
+    private Constants() {
+    }
+
     /**
      * JWT Token前缀
      */
@@ -14,6 +17,17 @@ public class Constants {
      * JWT Token请求头
      */
     public static final String TOKEN_HEADER = "Authorization";
+
+    /**
+     * Cache constants.
+     */
+    public static class Cache {
+        public static final String PRODUCT_LIST = "mall:product:list";
+        public static final String PRODUCT_HOT = "mall:product:hot";
+
+        private Cache() {
+        }
+    }
 
     /**
      * 订单状态

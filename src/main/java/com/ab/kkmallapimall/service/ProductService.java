@@ -1,5 +1,6 @@
 package com.ab.kkmallapimall.service;
 
+import com.ab.kkmallapimall.common.Constants;
 import com.ab.kkmallapimall.common.PageResult;
 import com.ab.kkmallapimall.dto.response.ProductVO;
 import com.ab.kkmallapimall.entity.Category;
@@ -12,6 +13,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.BeanUtils;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -34,6 +36,7 @@ public class ProductService {
     /**
      * Get product list.
      */
+    @Cacheable(cacheNames = Constants.Cache.PRODUCT_LIST, keyGenerator = "productListCacheKeyGenerator")
     public PageResult<ProductVO> getProductList(
             Long categoryId,
             String keyword,
@@ -41,14 +44,17 @@ public class ProductService {
             Integer pageNum,
             Integer pageSize
     ) {
+        String normalizedKeyword = normalizeKeyword(keyword);
+        String normalizedSortBy = normalizeSortBy(sortBy);
+
         Page<Product> page = new Page<>(pageNum, pageSize);
 
         LambdaQueryWrapper<Product> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(Product::getStatus, 1)
                 .eq(categoryId != null, Product::getCategoryId, categoryId)
-                .like(StringUtils.hasText(keyword), Product::getProductName, keyword);
+                .like(StringUtils.hasText(normalizedKeyword), Product::getProductName, normalizedKeyword);
 
-        if ("price".equalsIgnoreCase(sortBy)) {
+        if ("price".equals(normalizedSortBy)) {
             wrapper.orderByAsc(Product::getPrice).orderByDesc(Product::getCreateTime);
         } else {
             wrapper.orderByDesc(Product::getCreateTime);
@@ -78,6 +84,7 @@ public class ProductService {
     /**
      * Get hot products.
      */
+    @Cacheable(cacheNames = Constants.Cache.PRODUCT_HOT, keyGenerator = "hotProductsCacheKeyGenerator")
     public List<ProductVO> getHotProducts(Integer limit) {
         int safeLimit = normalizeHotLimit(limit);
 
@@ -130,5 +137,19 @@ public class ProductService {
             return 10;
         }
         return Math.min(limit, 50);
+    }
+
+    private String normalizeKeyword(String keyword) {
+        if (!StringUtils.hasText(keyword)) {
+            return null;
+        }
+        return keyword.trim();
+    }
+
+    private String normalizeSortBy(String sortBy) {
+        if (!StringUtils.hasText(sortBy)) {
+            return null;
+        }
+        return sortBy.trim().toLowerCase();
     }
 }
