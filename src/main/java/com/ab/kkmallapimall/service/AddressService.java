@@ -88,7 +88,8 @@ public class AddressService {
             cancelOtherDefaultAddress(userId, id);
         }
 
-        addressMapper.updateById(address);
+        int affected = addressMapper.updateById(address);
+        ensureUpdated(affected, "数据已变化，请刷新后重试");
         return address;
     }
 
@@ -122,7 +123,8 @@ public class AddressService {
 
         // 设置为默认地址
         address.setIsDefault(Constants.IsDefault.YES);
-        addressMapper.updateById(address);
+        int affected = addressMapper.updateById(address);
+        ensureUpdated(affected, "数据已变化，请刷新后重试");
     }
 
     /**
@@ -146,5 +148,12 @@ public class AddressService {
         }
 
         addressMapper.update(null, wrapper);
+    }
+
+    private void ensureUpdated(int affected, String message) {
+        if (affected > 0) {
+            return;
+        }
+        throw new BusinessException(409, message);
     }
 }

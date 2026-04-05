@@ -24,6 +24,9 @@ public class Cart implements Serializable {
 
     private Integer selected;
 
+    @Version
+    private Long version;
+
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createTime;
 

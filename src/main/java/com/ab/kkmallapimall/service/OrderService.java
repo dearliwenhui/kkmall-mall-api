@@ -52,6 +52,7 @@ import java.util.stream.Collectors;
 public class OrderService {
 
     private static final int POINTS_PER_CURRENCY = 100;
+    private static final int STOCK_UPDATE_MAX_RETRIES = 3;
 
     private final OrderMapper orderMapper;
     private final OrderItemMapper orderItemMapper;
@@ -98,8 +99,8 @@ public class OrderService {
             if (product.getStock() < cart.getQuantity()) {
                 throw new BusinessException(ErrorCode.PRODUCT_STOCK_NOT_ENOUGH);
             }
-            product.setStock(product.getStock() - cart.getQuantity());
-            productMapper.updateById(product);
+            int affected = deductStockWithRetry(product.getId(), cart.getQuantity());
+            ensureUpdated(affected, "商品库存已变更，请重新确认后下单");
 
             BigDecimal itemAmount = product.getPrice().multiply(BigDecimal.valueOf(cart.getQuantity()));
             totalAmount = totalAmount.add(itemAmount);
@@ -218,13 +219,14 @@ public class OrderService {
         for (OrderItem item : items) {
             Product product = productMapper.selectById(item.getProductId());
             if (product != null) {
-                product.setStock(product.getStock() + item.getQuantity());
-                productMapper.updateById(product);
+                int affected = increaseStockWithRetry(product.getId(), item.getQuantity());
+                ensureUpdated(affected, "商品库存已变更，请刷新后重试");
             }
         }
 
         order.setStatus(Constants.OrderStatus.CANCELLED);
-        orderMapper.updateById(order);
+        int cancelAffected = orderMapper.updateById(order);
+        ensureUpdated(cancelAffected, "订单状态已变化，请刷新后重试");
     }
 
     /**
@@ -243,7 +245,8 @@ public class OrderService {
 
         order.setStatus(Constants.OrderStatus.COMPLETED);
         order.setConfirmTime(LocalDateTime.now());
-        orderMapper.updateById(order);
+        int confirmAffected = orderMapper.updateById(order);
+        ensureUpdated(confirmAffected, "订单状态已变化，请刷新后重试");
     }
 
     /**
@@ -285,7 +288,8 @@ public class OrderService {
         order.setLogisticsCompany(logisticsCompany);
         order.setTrackingNumber(trackingNumber);
         order.setShipTime(LocalDateTime.now());
-        orderMapper.updateById(order);
+        int shipAffected = orderMapper.updateById(order);
+        ensureUpdated(shipAffected, "订单状态已变化，请刷新后重试");
     }
 
     private OrderVO convertToVO(Order order, List<OrderItem> items) {
@@ -397,6 +401,54 @@ public class OrderService {
         }
         String[] values = images.split(",");
         return values.length > 0 ? values[0] : null;
+    }
+
+    private int deductStockWithRetry(Long productId, Integer quantity) {
+        int required = quantity == null ? 0 : quantity;
+        if (required <= 0) {
+            return 1;
+        }
+        for (int attempt = 1; attempt <= STOCK_UPDATE_MAX_RETRIES; attempt++) {
+            Product latest = productMapper.selectById(productId);
+            if (latest == null || latest.getStatus() == null || latest.getStatus() == 0) {
+                throw new BusinessException(ErrorCode.PRODUCT_NOT_FOUND);
+            }
+            int currentStock = latest.getStock() == null ? 0 : latest.getStock();
+            if (currentStock < required) {
+                throw new BusinessException(ErrorCode.PRODUCT_STOCK_NOT_ENOUGH);
+            }
+            latest.setStock(currentStock - required);
+            if (productMapper.updateById(latest) > 0) {
+                return 1;
+            }
+        }
+        return 0;
+    }
+
+    private int increaseStockWithRetry(Long productId, Integer quantity) {
+        int delta = quantity == null ? 0 : quantity;
+        if (delta <= 0) {
+            return 1;
+        }
+        for (int attempt = 1; attempt <= STOCK_UPDATE_MAX_RETRIES; attempt++) {
+            Product latest = productMapper.selectById(productId);
+            if (latest == null) {
+                return 1;
+            }
+            int currentStock = latest.getStock() == null ? 0 : latest.getStock();
+            latest.setStock(currentStock + delta);
+            if (productMapper.updateById(latest) > 0) {
+                return 1;
+            }
+        }
+        return 0;
+    }
+
+    private void ensureUpdated(int affected, String message) {
+        if (affected > 0) {
+            return;
+        }
+        throw new BusinessException(409, message);
     }
 
     private record CouponCouponUsage(Long userCouponId, Long couponId, BigDecimal discountAmount) {

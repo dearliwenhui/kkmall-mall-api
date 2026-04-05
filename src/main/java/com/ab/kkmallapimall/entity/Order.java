@@ -49,6 +49,9 @@ public class Order implements Serializable {
 
     private LocalDateTime confirmTime;
 
+    @Version
+    private Long version;
+
     @TableLogic(value = "NULL", delval = "UNIX_TIMESTAMP(NOW()) * 1000")
     private Long deleted;
 

@@ -98,7 +98,8 @@ public class CouponService {
 
         // 更新优惠券领取数量
         coupon.setReceivedCount(coupon.getReceivedCount() + 1);
-        couponMapper.updateById(coupon);
+        int affected = couponMapper.updateById(coupon);
+        ensureUpdated(affected, "数据已变化，请刷新后重试");
     }
 
     /**
@@ -142,7 +143,8 @@ public class CouponService {
         userCoupon.setStatus(1); // 已使用
         userCoupon.setUsedTime(LocalDateTime.now());
         userCoupon.setOrderId(orderId);
-        userCouponMapper.updateById(userCoupon);
+        int affected = userCouponMapper.updateById(userCoupon);
+        ensureUpdated(affected, "数据已变化，请刷新后重试");
     }
 
     /**
@@ -181,5 +183,12 @@ public class CouponService {
         });
 
         return vo;
+    }
+
+    private void ensureUpdated(int affected, String message) {
+        if (affected > 0) {
+            return;
+        }
+        throw new BusinessException(409, message);
     }
 }

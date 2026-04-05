@@ -39,6 +39,9 @@ public class Product implements Serializable {
      */
     private String images;
 
+    @Version
+    private Long version;
+
     @TableLogic(value = "null", delval = "1")
     private Long deleted;
 

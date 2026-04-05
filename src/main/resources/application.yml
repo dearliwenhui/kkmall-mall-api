@@ -1,0 +1,11 @@
+kkmall:
+  hot-product:
+    env: ${KKMALL_HOT_PRODUCT_ENV:dev}
+    daily-rank-key-prefix: ${KKMALL_HOT_PRODUCT_DAILY_KEY_PREFIX:hot:product:rank}
+    current-rank-key-prefix: ${KKMALL_HOT_PRODUCT_CURRENT_KEY_PREFIX:hot:product:rank:current}
+    current-rank-size: ${KKMALL_HOT_PRODUCT_CURRENT_SIZE:100}
+    current-rank-ttl-hours: ${KKMALL_HOT_PRODUCT_CURRENT_TTL_HOURS:48}
+    daily-rank-ttl-days: ${KKMALL_HOT_PRODUCT_DAILY_TTL_DAYS:8}
+    refresh-cron: "${KKMALL_HOT_PRODUCT_REFRESH_CRON:0 */5 * * * *}"
+    cdc-cache-key-prefix: ${KKMALL_HOT_PRODUCT_CDC_PREFIX:cdc}
+

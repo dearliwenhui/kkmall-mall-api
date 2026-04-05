@@ -3,6 +3,7 @@ package com.ab.kkmallapimall.entity;
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.baomidou.mybatisplus.annotation.Version;
 import lombok.Data;
 
 import java.time.LocalDateTime;
@@ -28,6 +29,9 @@ public class UserCoupon {
     private Long orderId;
 
     private LocalDateTime expireTime;
+
+    @Version
+    private Long version;
 
     private LocalDateTime createTime;
 

@@ -3,6 +3,7 @@ package com.ab.kkmallapimall.service;
 import com.ab.kkmallapimall.common.PageResult;
 import com.ab.kkmallapimall.entity.MallUser;
 import com.ab.kkmallapimall.entity.PointsLog;
+import com.ab.kkmallapimall.exception.BusinessException;
 import com.ab.kkmallapimall.mapper.MallUserMapper;
 import com.ab.kkmallapimall.mapper.PointsLogMapper;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
@@ -40,7 +41,8 @@ public class PointsService {
         if (user != null) {
             Integer currentPoints = user.getPoints() != null ? user.getPoints() : 0;
             user.setPoints(currentPoints + points);
-            mallUserMapper.updateById(user);
+            int affected = mallUserMapper.updateById(user);
+            ensureUpdated(affected, "数据已变化，请刷新后重试");
         }
 
         PointsLog log = new PointsLog();
@@ -68,7 +70,8 @@ public class PointsService {
                 throw new RuntimeException("积分不足");
             }
             user.setPoints(currentPoints - points);
-            mallUserMapper.updateById(user);
+            int affected = mallUserMapper.updateById(user);
+            ensureUpdated(affected, "数据已变化，请刷新后重试");
         }
 
         PointsLog log = new PointsLog();
@@ -143,5 +146,12 @@ public class PointsService {
             case 4 -> "兑换";
             default -> "其他";
         };
+    }
+
+    private void ensureUpdated(int affected, String message) {
+        if (affected > 0) {
+            return;
+        }
+        throw new BusinessException(409, message);
     }
 }

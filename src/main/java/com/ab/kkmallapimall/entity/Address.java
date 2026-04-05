@@ -32,6 +32,9 @@ public class Address implements Serializable {
 
     private Integer isDefault;
 
+    @Version
+    private Long version;
+
     @TableLogic(value = "NULL", delval = "UNIX_TIMESTAMP(NOW()) * 1000")
     private Long deleted;
 

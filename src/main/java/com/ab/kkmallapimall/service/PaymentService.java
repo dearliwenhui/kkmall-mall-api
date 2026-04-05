@@ -94,14 +94,16 @@ public class PaymentService {
         payment.setStatus(1); // 支付成功
         payment.setPayTime(LocalDateTime.now());
         payment.setThirdPartyNo("MOCK" + System.currentTimeMillis());
-        paymentMapper.updateById(payment);
+        int paymentAffected = paymentMapper.updateById(payment);
+        ensureUpdated(paymentAffected, "数据已变化，请刷新后重试");
 
         // 更新订单状态
         Order order = orderMapper.selectById(payment.getOrderId());
         if (order != null) {
             order.setStatus(Constants.OrderStatus.PENDING_SHIPMENT);
             order.setPayTime(LocalDateTime.now());
-            orderMapper.updateById(order);
+            int orderAffected = orderMapper.updateById(order);
+            ensureUpdated(orderAffected, "订单状态已变化，请刷新后重试");
         }
 
         Map<String, Object> result = new HashMap<>();
@@ -184,5 +186,12 @@ public class PaymentService {
             case 2 -> "支付失败";
             default -> "未知";
         };
+    }
+
+    private void ensureUpdated(int affected, String message) {
+        if (affected > 0) {
+            return;
+        }
+        throw new BusinessException(409, message);
     }
 }

@@ -63,7 +63,8 @@ public class CartService {
                 throw new BusinessException(ErrorCode.PRODUCT_STOCK_NOT_ENOUGH);
             }
             existingCart.setQuantity(newQuantity);
-            cartMapper.updateById(existingCart);
+            int affected = cartMapper.updateById(existingCart);
+            ensureUpdated(affected, "数据已变化，请刷新后重试");
         } else {
             // 不存在，新增
             Cart cart = new Cart();
@@ -110,7 +111,8 @@ public class CartService {
         }
 
         cart.setQuantity(quantity);
-        cartMapper.updateById(cart);
+        int affected = cartMapper.updateById(cart);
+        ensureUpdated(affected, "数据已变化，请刷新后重试");
     }
 
     /**
@@ -177,5 +179,12 @@ public class CartService {
         }
 
         return vo;
+    }
+
+    private void ensureUpdated(int affected, String message) {
+        if (affected > 0) {
+            return;
+        }
+        throw new BusinessException(409, message);
     }
 }

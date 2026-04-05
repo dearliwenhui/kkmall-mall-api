@@ -132,7 +132,8 @@ public class RefundService {
             // 执行退款
             processRefund(refund);
         }
-        refundMapper.updateById(refund);
+        int refundAffected = refundMapper.updateById(refund);
+        ensureUpdated(refundAffected, "数据已变化，请刷新后重试");
     }
 
     /**
@@ -153,7 +154,8 @@ public class RefundService {
             Product product = productMapper.selectById(item.getProductId());
             if (product != null) {
                 product.setStock(product.getStock() + item.getQuantity());
-                productMapper.updateById(product);
+                int affected = productMapper.updateById(product);
+                ensureUpdated(affected, "商品库存已变更，请刷新后重试");
             }
         }
 
@@ -161,7 +163,8 @@ public class RefundService {
         Order order = orderMapper.selectById(refund.getOrderId());
         if (order != null) {
             order.setStatus(Constants.OrderStatus.CANCELLED);
-            orderMapper.updateById(order);
+            int affected = orderMapper.updateById(order);
+            ensureUpdated(affected, "订单状态已变化，请刷新后重试");
         }
     }
 
@@ -180,5 +183,12 @@ public class RefundService {
             default -> "未知";
         });
         return vo;
+    }
+
+    private void ensureUpdated(int affected, String message) {
+        if (affected > 0) {
+            return;
+        }
+        throw new BusinessException(409, message);
     }
 }

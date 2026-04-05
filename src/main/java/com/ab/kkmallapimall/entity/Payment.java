@@ -3,6 +3,7 @@ package com.ab.kkmallapimall.entity;
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.baomidou.mybatisplus.annotation.Version;
 import lombok.Data;
 
 import java.math.BigDecimal;
@@ -62,6 +63,9 @@ public class Payment {
      * 第三方支付流水号
      */
     private String thirdPartyNo;
+
+    @Version
+    private Long version;
 
     /**
      * 创建时间

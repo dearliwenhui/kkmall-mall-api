@@ -15,9 +15,11 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.beans.BeanUtils;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
+import org.springframework.util.CollectionUtils;
 import org.springframework.util.StringUtils;
 
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -32,6 +34,8 @@ public class ProductService {
 
     private final ProductMapper productMapper;
     private final CategoryMapper categoryMapper;
+    private final ProductHotMetricsService productHotMetricsService;
+    private final ProductProjectionCacheService productProjectionCacheService;
 
     /**
      * Get product list.
@@ -74,20 +78,47 @@ public class ProductService {
      * Get product detail.
      */
     public ProductVO getProductDetail(Long id) {
-        Product product = productMapper.selectById(id);
-        if (product == null || product.getStatus() == 0) {
+        Product product = productProjectionCacheService.getProductById(id);
+        if (product == null) {
             throw new BusinessException(ErrorCode.PRODUCT_NOT_FOUND);
         }
+        productHotMetricsService.recordProductView(id);
         return convertToVO(product, buildCategoryNameMap(List.of(product)));
     }
 
     /**
      * Get hot products.
      */
-    @Cacheable(cacheNames = Constants.Cache.PRODUCT_HOT, keyGenerator = "hotProductsCacheKeyGenerator")
     public List<ProductVO> getHotProducts(Integer limit) {
         int safeLimit = normalizeHotLimit(limit);
+        List<Long> hotProductIds = productHotMetricsService.getHotProductIds(safeLimit);
 
+        if (CollectionUtils.isEmpty(hotProductIds)) {
+            return loadFallbackHotProducts(safeLimit);
+        }
+
+        Map<Long, Product> productMap = productProjectionCacheService.getProductsByIds(hotProductIds);
+        if (productMap.isEmpty()) {
+            return loadFallbackHotProducts(safeLimit);
+        }
+
+        List<Product> orderedProducts = hotProductIds.stream()
+                .map(productMap::get)
+                .filter(java.util.Objects::nonNull)
+                .limit(safeLimit)
+                .toList();
+
+        if (orderedProducts.isEmpty()) {
+            return loadFallbackHotProducts(safeLimit);
+        }
+
+        Map<Long, String> categoryNameMap = buildCategoryNameMap(orderedProducts);
+        return orderedProducts.stream()
+                .map(product -> convertToVO(product, categoryNameMap))
+                .toList();
+    }
+
+    private List<ProductVO> loadFallbackHotProducts(int safeLimit) {
         LambdaQueryWrapper<Product> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(Product::getStatus, 1)
                 .orderByDesc(Product::getCreateTime)
@@ -95,10 +126,9 @@ public class ProductService {
 
         List<Product> products = productMapper.selectList(wrapper);
         Map<Long, String> categoryNameMap = buildCategoryNameMap(products);
-
         return products.stream()
                 .map(product -> convertToVO(product, categoryNameMap))
-                .collect(Collectors.toList());
+                .toList();
     }
 
     private ProductVO convertToVO(Product product, Map<Long, String> categoryNameMap) {
