@@ -23,6 +23,7 @@
         <spring-cloud.version>2023.0.1</spring-cloud.version>
         <spring-cloud-alibaba.version>2023.0.1.0</spring-cloud-alibaba.version>
         <mybatis-plus.version>3.5.7</mybatis-plus.version>
+        <rocketmq-client.version>5.3.1</rocketmq-client.version>
         <jjwt.version>0.12.3</jjwt.version>
         <knife4j.version>4.4.0</knife4j.version>
     </properties>
@@ -102,6 +103,12 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.rocketmq</groupId>
+            <artifactId>rocketmq-client</artifactId>
+            <version>${rocketmq-client.version}</version>
         </dependency>
 
         <!-- Validation -->

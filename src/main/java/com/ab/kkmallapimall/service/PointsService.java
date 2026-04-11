@@ -19,7 +19,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
- * Points service.
+ * 积分服务。
  */
 @Service
 @RequiredArgsConstructor
@@ -28,9 +28,6 @@ public class PointsService {
     private final PointsLogMapper pointsLogMapper;
     private final MallUserMapper mallUserMapper;
 
-    /**
-     * Add points.
-     */
     @Transactional(rollbackFor = Exception.class)
     public void addPoints(Long userId, Integer points, Integer type, Long orderId, String description) {
         if (points <= 0) {
@@ -54,9 +51,6 @@ public class PointsService {
         pointsLogMapper.insert(log);
     }
 
-    /**
-     * Deduct points.
-     */
     @Transactional(rollbackFor = Exception.class)
     public void deductPoints(Long userId, Integer points, Integer type, Long orderId, String description) {
         if (points <= 0) {
@@ -84,16 +78,34 @@ public class PointsService {
     }
 
     /**
-     * Get user points.
+     * 超时或取消订单后返还积分。
      */
+    @Transactional(rollbackFor = Exception.class)
+    public void restorePointsForOrder(Long userId, Long orderId, String description) {
+        if (orderId == null) {
+            return;
+        }
+        List<PointsLog> deductionLogs = pointsLogMapper.selectList(
+                new LambdaQueryWrapper<PointsLog>()
+                        .eq(PointsLog::getUserId, userId)
+                        .eq(PointsLog::getOrderId, orderId)
+                        .lt(PointsLog::getPoints, 0)
+        );
+        int pointsToRestore = deductionLogs.stream()
+                .map(PointsLog::getPoints)
+                .filter(points -> points != null && points < 0)
+                .mapToInt(points -> -points)
+                .sum();
+        if (pointsToRestore > 0) {
+            addPoints(userId, pointsToRestore, 5, orderId, description);
+        }
+    }
+
     public Integer getUserPoints(Long userId) {
         MallUser user = mallUserMapper.selectById(userId);
         return user != null && user.getPoints() != null ? user.getPoints() : 0;
     }
 
-    /**
-     * Get points log.
-     */
     public PageResult<Map<String, Object>> getPointsLog(Long userId, Integer pageNum, Integer pageSize) {
         Page<PointsLog> page = new Page<>(pageNum, pageSize);
 
@@ -102,7 +114,6 @@ public class PointsService {
                 .orderByDesc(PointsLog::getCreateTime);
 
         Page<PointsLog> logPage = pointsLogMapper.selectPage(page, wrapper);
-
         List<Map<String, Object>> resultList = logPage.getRecords().stream()
                 .map(log -> {
                     Map<String, Object> map = new HashMap<>();
@@ -115,13 +126,9 @@ public class PointsService {
                     return map;
                 })
                 .collect(Collectors.toList());
-
         return PageResult.of(pageNum, pageSize, logPage.getTotal(), resultList);
     }
 
-    /**
-     * Daily sign in.
-     */
     @Transactional(rollbackFor = Exception.class)
     public void signIn(Long userId) {
         LocalDateTime startOfDay = LocalDateTime.now().toLocalDate().atStartOfDay();
@@ -144,6 +151,7 @@ public class PointsService {
             case 2 -> "购物";
             case 3 -> "评价";
             case 4 -> "兑换";
+            case 5 -> "订单返还";
             default -> "其他";
         };
     }

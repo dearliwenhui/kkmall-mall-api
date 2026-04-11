@@ -1,11 +1,11 @@
--- KKMall商城数据库表结构
--- 注意：商品表(product)由管理后台维护，商城后端只读
+-- KKMall 商城数据库表结构
+-- 注意：商品表（product）由管理后台维护，商城后端主要做只读和下单关联
 
 -- 商品分类表
 CREATE TABLE IF NOT EXISTS `mall_category` (
   `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '分类ID',
   `name` VARCHAR(50) NOT NULL COMMENT '分类名称',
-  `parent_id` BIGINT DEFAULT 0 COMMENT '父分类ID（0表示顶级分类）',
+  `parent_id` BIGINT DEFAULT 0 COMMENT '父分类ID，0 表示顶级分类',
   `level` TINYINT DEFAULT 1 COMMENT '分类层级（1/2/3）',
   `sort` INT DEFAULT 0 COMMENT '排序',
   `icon` VARCHAR(255) COMMENT '分类图标URL',
@@ -57,12 +57,13 @@ CREATE TABLE IF NOT EXISTS `mall_order` (
   `order_no` VARCHAR(64) NOT NULL COMMENT '订单号',
   `user_id` BIGINT NOT NULL COMMENT '用户ID',
   `total_amount` DECIMAL(10,2) NOT NULL COMMENT '订单总金额',
-  `status` TINYINT NOT NULL DEFAULT 0 COMMENT '订单状态（0-待付款，1-待发货，2-待收货，3-已完成，4-已取消）',
+  `status` TINYINT NOT NULL DEFAULT 0 COMMENT '订单状态（0-待付款，1-待发货，2-待收货，3-已完成，4-已取消，5-已关闭）',
   `address_id` BIGINT NOT NULL COMMENT '收货地址ID',
   `receiver_name` VARCHAR(50) NOT NULL COMMENT '收货人姓名',
   `receiver_phone` VARCHAR(20) NOT NULL COMMENT '收货人电话',
   `receiver_address` VARCHAR(500) NOT NULL COMMENT '收货地址',
   `remark` VARCHAR(500) COMMENT '订单备注',
+  `expire_time` DATETIME COMMENT '最晚支付时间',
   `pay_time` DATETIME COMMENT '支付时间',
   `ship_time` DATETIME COMMENT '发货时间',
   `confirm_time` DATETIME COMMENT '确认收货时间',
@@ -72,6 +73,7 @@ CREATE TABLE IF NOT EXISTS `mall_order` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_order_no` (`order_no`),
   KEY `idx_user_id` (`user_id`),
+  KEY `idx_status_expire_time` (`status`, `expire_time`),
   KEY `idx_status` (`status`),
   KEY `idx_create_time` (`create_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='订单表';
@@ -109,7 +111,7 @@ CREATE TABLE IF NOT EXISTS `mall_address` (
   KEY `idx_user_id` (`user_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='收货地址表';
 
--- 为商品表添加分类字段（如果不存在）
+-- 如商品表未包含分类字段，可按需执行：
 -- ALTER TABLE `product` ADD COLUMN `category_id` BIGINT COMMENT '分类ID' AFTER `product_code`;
 -- ALTER TABLE `product` ADD KEY `idx_category_id` (`category_id`);
 

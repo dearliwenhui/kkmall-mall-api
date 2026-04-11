@@ -37,6 +37,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         // 公开接口
                         .requestMatchers("/actuator/health", "/actuator/health/**", "/actuator/prometheus").permitAll()
+                        .requestMatchers("/api/internal/orders/**").permitAll()
                         .requestMatchers("/api/mall/auth/**").permitAll()
                         .requestMatchers("/api/mall/products/**").permitAll()
                         .requestMatchers("/api/mall/categories/**").permitAll()

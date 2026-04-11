@@ -30,6 +30,10 @@ public class OrderVO {
 
     private String remark;
 
+    private LocalDateTime expireTime;
+
+    private Long remainingSeconds;
+
     private LocalDateTime payTime;
 
     private LocalDateTime shipTime;

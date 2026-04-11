@@ -2,6 +2,7 @@ package com.ab.kkmallapimall.service;
 
 import com.ab.kkmallapimall.common.Constants;
 import com.ab.kkmallapimall.common.PageResult;
+import com.ab.kkmallapimall.config.OrderTimeoutProperties;
 import com.ab.kkmallapimall.dto.request.CreateOrderRequest;
 import com.ab.kkmallapimall.dto.response.OrderItemVO;
 import com.ab.kkmallapimall.dto.response.OrderVO;
@@ -13,6 +14,7 @@ import com.ab.kkmallapimall.entity.Order;
 import com.ab.kkmallapimall.entity.OrderItem;
 import com.ab.kkmallapimall.entity.Product;
 import com.ab.kkmallapimall.entity.UserCoupon;
+import com.ab.kkmallapimall.event.OrderCreatedEvent;
 import com.ab.kkmallapimall.exception.BusinessException;
 import com.ab.kkmallapimall.exception.ErrorCode;
 import com.ab.kkmallapimall.mapper.AddressMapper;
@@ -29,12 +31,14 @@ import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.BeanUtils;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.Collections;
@@ -45,7 +49,10 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * Order service.
+ * 订单服务。
+ *
+ * 这里除了基础下单/查询能力外，还负责把订单超时字段暴露给前端，
+ * 并在下单成功后触发延时关单消息。
  */
 @Service
 @RequiredArgsConstructor
@@ -64,9 +71,12 @@ public class OrderService {
     private final MallUserMapper mallUserMapper;
     private final CouponService couponService;
     private final PointsService pointsService;
+    private final OrderTimeoutService orderTimeoutService;
+    private final OrderTimeoutProperties orderTimeoutProperties;
+    private final ApplicationEventPublisher applicationEventPublisher;
 
     /**
-     * Create order.
+     * 创建订单。
      */
     @Transactional(rollbackFor = Exception.class)
     public OrderVO createOrder(Long userId, CreateOrderRequest request) {
@@ -92,15 +102,15 @@ public class OrderService {
         BigDecimal totalAmount = BigDecimal.ZERO;
         for (Cart cart : carts) {
             Product product = productMap.get(cart.getProductId());
-            if (product == null || product.getStatus() == 0) {
+            if (product == null || product.getStatus() == null || product.getStatus() == 0) {
                 throw new BusinessException(ErrorCode.PRODUCT_NOT_FOUND);
             }
-
             if (product.getStock() < cart.getQuantity()) {
                 throw new BusinessException(ErrorCode.PRODUCT_STOCK_NOT_ENOUGH);
             }
+
             int affected = deductStockWithRetry(product.getId(), cart.getQuantity());
-            ensureUpdated(affected, "商品库存已变更，请重新确认后下单");
+            ensureUpdated(affected, "商品库存已变化，请重新确认后下单");
 
             BigDecimal itemAmount = product.getPrice().multiply(BigDecimal.valueOf(cart.getQuantity()));
             totalAmount = totalAmount.add(itemAmount);
@@ -115,6 +125,7 @@ public class OrderService {
                 .max(BigDecimal.ZERO)
                 .setScale(2, RoundingMode.HALF_UP);
 
+        LocalDateTime now = LocalDateTime.now();
         Order order = new Order();
         order.setOrderNo(OrderNoGenerator.generate());
         order.setUserId(userId);
@@ -131,7 +142,10 @@ public class OrderService {
                 + address.getDistrict() + address.getDetail());
         order.setRemark(request.getRemark());
         if (payableAmount.compareTo(BigDecimal.ZERO) == 0) {
-            order.setPayTime(LocalDateTime.now());
+            order.setPayTime(now);
+        } else {
+            // 待支付订单写入明确的失效时间，便于后端关单与前端倒计时展示。
+            order.setExpireTime(now.plusMinutes(orderTimeoutProperties.getTimeoutMinutes()));
         }
         orderMapper.insert(order);
 
@@ -164,19 +178,32 @@ public class OrderService {
 
         cartMapper.deleteBatchIds(request.getCartIds());
 
+        if (order.getStatus() == Constants.OrderStatus.PENDING_PAYMENT && order.getExpireTime() != null) {
+            // 只有待支付订单需要发送延时检查消息。
+            applicationEventPublisher.publishEvent(
+                    new OrderCreatedEvent(order.getId(), order.getOrderNo(), order.getUserId(), order.getExpireTime())
+            );
+        }
+
         return getOrderDetail(userId, order.getId());
     }
 
     /**
-     * Get order list.
+     * 查询订单列表。
      */
     public PageResult<OrderVO> getOrderList(Long userId, Integer status, Integer pageNum, Integer pageSize) {
         Page<Order> page = new Page<>(pageNum, pageSize);
 
         LambdaQueryWrapper<Order> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(Order::getUserId, userId)
-                .eq(status != null, Order::getStatus, status)
-                .orderByDesc(Order::getCreateTime);
+        wrapper.eq(Order::getUserId, userId);
+        if (status != null) {
+            if (status == Constants.OrderStatus.CANCELLED) {
+                wrapper.in(Order::getStatus, Constants.OrderStatus.CANCELLED, Constants.OrderStatus.CLOSED);
+            } else {
+                wrapper.eq(Order::getStatus, status);
+            }
+        }
+        wrapper.orderByDesc(Order::getCreateTime);
 
         Page<Order> orderPage = orderMapper.selectPage(page, wrapper);
         Map<Long, List<OrderItem>> itemMap = loadOrderItemsMap(
@@ -191,7 +218,7 @@ public class OrderService {
     }
 
     /**
-     * Get order detail.
+     * 查询订单详情。
      */
     public OrderVO getOrderDetail(Long userId, Long orderId) {
         Order order = orderMapper.selectById(orderId);
@@ -202,7 +229,8 @@ public class OrderService {
     }
 
     /**
-     * Cancel order.
+     * 用户主动取消订单。
+     * 具体回补逻辑统一收敛到 OrderTimeoutService，避免多处重复实现。
      */
     @Transactional(rollbackFor = Exception.class)
     public void cancelOrder(Long userId, Long orderId) {
@@ -210,27 +238,17 @@ public class OrderService {
         if (order == null || !order.getUserId().equals(userId)) {
             throw new BusinessException(ErrorCode.ORDER_NOT_FOUND);
         }
-
         if (order.getStatus() != Constants.OrderStatus.PENDING_PAYMENT) {
             throw new BusinessException(ErrorCode.ORDER_CANNOT_CANCEL);
         }
-
-        List<OrderItem> items = loadOrderItems(orderId);
-        for (OrderItem item : items) {
-            Product product = productMapper.selectById(item.getProductId());
-            if (product != null) {
-                int affected = increaseStockWithRetry(product.getId(), item.getQuantity());
-                ensureUpdated(affected, "商品库存已变更，请刷新后重试");
-            }
+        boolean cancelled = orderTimeoutService.cancelPendingPaymentOrder(orderId);
+        if (!cancelled) {
+            throw new BusinessException(ErrorCode.ORDER_CANNOT_CANCEL);
         }
-
-        order.setStatus(Constants.OrderStatus.CANCELLED);
-        int cancelAffected = orderMapper.updateById(order);
-        ensureUpdated(cancelAffected, "订单状态已变化，请刷新后重试");
     }
 
     /**
-     * Confirm receipt.
+     * 确认收货。
      */
     @Transactional(rollbackFor = Exception.class)
     public void confirmOrder(Long userId, Long orderId) {
@@ -250,7 +268,7 @@ public class OrderService {
     }
 
     /**
-     * Delete order.
+     * 删除订单（逻辑删除）。
      */
     @Transactional(rollbackFor = Exception.class)
     public void deleteOrder(Long userId, Long orderId) {
@@ -260,7 +278,8 @@ public class OrderService {
         }
 
         if (order.getStatus() != Constants.OrderStatus.COMPLETED
-                && order.getStatus() != Constants.OrderStatus.CANCELLED) {
+                && order.getStatus() != Constants.OrderStatus.CANCELLED
+                && order.getStatus() != Constants.OrderStatus.CLOSED) {
             throw new BusinessException(ErrorCode.ORDER_STATUS_ERROR);
         }
 
@@ -271,7 +290,7 @@ public class OrderService {
     }
 
     /**
-     * Ship order for admin.
+     * 后台发货。
      */
     @Transactional(rollbackFor = Exception.class)
     public void shipOrder(Long orderId, String logisticsCompany, String trackingNumber) {
@@ -295,6 +314,8 @@ public class OrderService {
     private OrderVO convertToVO(Order order, List<OrderItem> items) {
         OrderVO vo = new OrderVO();
         BeanUtils.copyProperties(order, vo);
+        // 前端直接使用剩余秒数做倒计时，避免自己重复计算业务规则。
+        vo.setRemainingSeconds(calculateRemainingSeconds(order));
         List<OrderItemVO> itemVOList = (items == null ? Collections.<OrderItem>emptyList() : items)
                 .stream()
                 .map(item -> {
@@ -305,6 +326,17 @@ public class OrderService {
                 .collect(Collectors.toList());
         vo.setItems(itemVOList);
         return vo;
+    }
+
+    private Long calculateRemainingSeconds(Order order) {
+        if (order == null
+                || order.getStatus() == null
+                || order.getStatus() != Constants.OrderStatus.PENDING_PAYMENT
+                || order.getExpireTime() == null) {
+            return 0L;
+        }
+        long remaining = Duration.between(LocalDateTime.now(), order.getExpireTime()).getSeconds();
+        return Math.max(remaining, 0L);
     }
 
     private List<OrderItem> loadOrderItems(Long orderId) {
@@ -404,6 +436,7 @@ public class OrderService {
     }
 
     private int deductStockWithRetry(Long productId, Integer quantity) {
+        // 下单扣库存采用简单重试，配合乐观锁减少并发写冲突。
         int required = quantity == null ? 0 : quantity;
         if (required <= 0) {
             return 1;
@@ -418,25 +451,6 @@ public class OrderService {
                 throw new BusinessException(ErrorCode.PRODUCT_STOCK_NOT_ENOUGH);
             }
             latest.setStock(currentStock - required);
-            if (productMapper.updateById(latest) > 0) {
-                return 1;
-            }
-        }
-        return 0;
-    }
-
-    private int increaseStockWithRetry(Long productId, Integer quantity) {
-        int delta = quantity == null ? 0 : quantity;
-        if (delta <= 0) {
-            return 1;
-        }
-        for (int attempt = 1; attempt <= STOCK_UPDATE_MAX_RETRIES; attempt++) {
-            Product latest = productMapper.selectById(productId);
-            if (latest == null) {
-                return 1;
-            }
-            int currentStock = latest.getStock() == null ? 0 : latest.getStock();
-            latest.setStock(currentStock + delta);
             if (productMapper.updateById(latest) > 0) {
                 return 1;
             }

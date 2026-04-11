@@ -8,4 +8,18 @@ kkmall:
     daily-rank-ttl-days: ${KKMALL_HOT_PRODUCT_DAILY_TTL_DAYS:8}
     refresh-cron: "${KKMALL_HOT_PRODUCT_REFRESH_CRON:0 */5 * * * *}"
     cdc-cache-key-prefix: ${KKMALL_HOT_PRODUCT_CDC_PREFIX:cdc}
+  order-timeout:
+    env: ${KKMALL_ORDER_TIMEOUT_ENV:dev}
+    timeout-minutes: ${KKMALL_ORDER_TIMEOUT_MINUTES:30}
+    batch-size: ${KKMALL_ORDER_TIMEOUT_BATCH_SIZE:100}
+    compensation-cron: "${KKMALL_ORDER_TIMEOUT_COMPENSATION_CRON:0 */1 * * * *}"
+    internal-api-token: ${KKMALL_ORDER_TIMEOUT_INTERNAL_API_TOKEN:kkmall-order-timeout-dev-token}
+    rocketmq:
+      enabled: ${KKMALL_ORDER_TIMEOUT_ROCKETMQ_ENABLED:true}
+      nameserver: ${KKMALL_ORDER_TIMEOUT_ROCKETMQ_NAMESERVER:10.0.0.166:9876}
+      producer-group: ${KKMALL_ORDER_TIMEOUT_ROCKETMQ_PRODUCER_GROUP:kkmall-mall-api-order-timeout-producer-dev}
+      topic: ${KKMALL_ORDER_TIMEOUT_ROCKETMQ_TOPIC:kkmall_order_timeout_dev}
+      tag: ${KKMALL_ORDER_TIMEOUT_ROCKETMQ_TAG:check}
+      delay-level: ${KKMALL_ORDER_TIMEOUT_ROCKETMQ_DELAY_LEVEL:17}
+      send-timeout-ms: ${KKMALL_ORDER_TIMEOUT_ROCKETMQ_SEND_TIMEOUT_MS:3000}
 
