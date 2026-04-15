@@ -17,8 +17,8 @@ kkmall:
     rocketmq:
       enabled: ${KKMALL_ORDER_TIMEOUT_ROCKETMQ_ENABLED:true}
       nameserver: ${KKMALL_ORDER_TIMEOUT_ROCKETMQ_NAMESERVER:10.0.0.166:9876}
-      producer-group: ${KKMALL_ORDER_TIMEOUT_ROCKETMQ_PRODUCER_GROUP:kkmall-mall-api-order-timeout-producer-dev}
-      topic: ${KKMALL_ORDER_TIMEOUT_ROCKETMQ_TOPIC:kkmall_order_timeout_dev}
+      producer-group: ${KKMALL_ORDER_TIMEOUT_ROCKETMQ_PRODUCER_GROUP:kkmall-mall-api-order-timeout-producer}
+      topic: ${KKMALL_ORDER_TIMEOUT_ROCKETMQ_TOPIC:kkmall_order_timeout}
       tag: ${KKMALL_ORDER_TIMEOUT_ROCKETMQ_TAG:check}
       delay-level: ${KKMALL_ORDER_TIMEOUT_ROCKETMQ_DELAY_LEVEL:17}
       send-timeout-ms: ${KKMALL_ORDER_TIMEOUT_ROCKETMQ_SEND_TIMEOUT_MS:3000}
